@@ -1,112 +1,28 @@
-var express = require('express');
-var http = require('http');
-var io = require('socket.io');
-var app = express();
-var server = http.createServer(app);
-var socketServer = io.listen(server);
-var util = require("util");
-//var port = 3000;
-var port = 3000;
-var Player = require("./Player").Player;
+var WebSocketServer = require("ws").Server
+var http = require("http")
+var express = require("express")
+var app = express()
+var port = process.env.PORT || 5000
 
-app.use(express.static(__dirname + '/public'));
+app.use(express.static(__dirname + "/"))
 
-var Game = {};
+var server = http.createServer(app)
+server.listen(port)
 
-function init()
-{
-	server.listen(port);
-	console.log("Starting server on port "+port);
+console.log("http server listening on %d", port)
 
-	Game.players = [];
-	// Start listening for events
-	setEventHandlers();
-}
+var wss = new WebSocketServer({server: server})
+console.log("websocket server created")
 
-var setEventHandlers = function() {
-	// Socket.IO
-	socketServer.sockets.on("connection", onSocketConnection);
-};
+wss.on("connection", function(ws) {
+  var id = setInterval(function() {
+    ws.send(JSON.stringify(new Date()), function() {  })
+  }, 1000)
 
-// New socket connection
-function onSocketConnection(client) {
-	util.log("New player has connected: "+client.id);
+  console.log("websocket connection open")
 
-	// Listen for new player message
-	client.on("new player", onNewPlayer);
-	// Listen for client disconnected
-	client.on("disconnect", onClientDisconnect);
-	// Listen for move player message
-	client.on("move player", onMovePlayer);
-};
-
-// New player has joined
-function onNewPlayer(data) {
-	// Create a new player
-	var newPlayer = new Player(data.x, data.y);
-	newPlayer.id = this.id;
-	
-	// Broadcast new player to connected socket clients
-	this.broadcast.emit("new player", {id: newPlayer.id, x: newPlayer.getX(), y: newPlayer.getY()});
-
-	// Send existing players to the new player
-	var i, existingPlayer;
-	for (i = 0; i < Game.players.length; i++) {
-		existingPlayer = Game.players[i];
-		this.emit("new player", {id: existingPlayer.id, x: existingPlayer.getX(), y: existingPlayer.getY()});
-	};
-		
-	// Add new player to the players array
-	Game.players.push(newPlayer);
-};
-
-function onClientDisconnect() {
-	util.log("Player has disconnected: "+this.id);
-
-	var removePlayer = playerById(this.id);
-
-	// Player not found
-	if (!removePlayer) {
-		util.log("Player not found: "+this.id);
-		return;
-	};
-
-	// Remove player from players array
-	Game.players.splice(Game.players.indexOf(removePlayer), 1);
-
-	// Broadcast removed player to connected socket clients
-	this.broadcast.emit('remove player',{id: this.id});
-};
-
-// Player has moved
-function onMovePlayer(data) {
-	// Find player in array
-	var movePlayer = playerById(this.id);
-
-	// Player not found
-	if (!movePlayer) {
-		util.log("Player not found: "+this.id);
-		return;
-	};
-
-	// Update player position
-	movePlayer.setX(data.x);
-	movePlayer.setY(data.y);
-
-	// Broadcast updated position to connected socket clients
-	this.broadcast.emit("move player", {id: movePlayer.id, x: movePlayer.getX(), y: movePlayer.getY()});
-};
-
-function playerById(id) {
-	var i;
-	for (i = 0; i < Game.players.length; i++) {
-		if (Game.players[i].id == id)
-			return Game.players[i];
-	};
-	
-	return false;
-};
-
-init();
-
-
+  ws.on("close", function() {
+    console.log("websocket connection close")
+    clearInterval(id)
+  })
+})
